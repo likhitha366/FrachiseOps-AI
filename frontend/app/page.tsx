@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import axios from "axios";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AreaChart,
   Area,
@@ -146,8 +148,8 @@ const WORKFLOW_STEPS = [
   { id: 1,  name: "Franchise Data",           icon: "Database",      category: "input",  desc: "Aggregates sales logs, inventory status, staff shifts, marketing spends, and store audit logs.", active: false },
   { id: 2,  name: "Data Validation",          icon: "Check",         category: "process",desc: "Validates schema compliance, handles missing values, cleans transaction records, and processes inputs.", active: false },
   { id: 3,  name: "Outlet Performance Agent", icon: "Trend",         category: "agent",  desc: "Monitors sales, runs trend forecasting, and measures operational efficiency.", active: true },
-  { id: 4,  name: "Inventory Agent",          icon: "Inventory",     category: "agent",  desc: "Tracks stock levels, calculates depletion rates, detects stockouts, and automates replenishment.", active: false },
-  { id: 5,  name: "Staff Agent",              icon: "Staff",         category: "agent",  desc: "Analyzes staff efficiency, generates automated shifts, and optimizes staffing against sales trends.", active: false },
+  { id: 4,  name: "Inventory Agent",          icon: "Inventory",     category: "agent",  desc: "Monitors stock health and recommends safe discounts for overstocked, slow-moving products.", active: true },
+  { id: 5,  name: "Staff Agent",              icon: "Staff",         category: "agent",  desc: "Tracks attendance, performance, skills, shifts, and team readiness across outlets.", active: true },
   { id: 6,  name: "Marketing Agent",          icon: "Marketing",     category: "agent",  desc: "Computes campaign ROI, tracks promotion conversions, and optimizes discount allocations.", active: false },
   { id: 7,  name: "Audit Agent",              icon: "Audit",         category: "agent",  desc: "Validates compliance with brand guidelines, analyzes safety audits, and flags non-compliance.", active: false },
   { id: 8,  name: "Franchise Intelligence",   icon: "Intelligence",  category: "engine", desc: "Fuses domain-specific insights into a centralized reasoning engine to find correlations.", active: false },
@@ -172,6 +174,112 @@ const CATEGORY_BG: Record<string, string> = {
 };
 
 const BACKEND_URL = "http://localhost:5000/api";
+
+type InventoryItem = {
+  id: number;
+  name: string;
+  category: string;
+  stock: number;
+  reorderPoint: number;
+  weeklySales: number;
+  daysInStock: number;
+  unitPrice: number;
+  recommendedDiscount: number;
+  status: "Overstock" | "Healthy" | "Low stock";
+  applied: boolean;
+};
+
+const INITIAL_INVENTORY: InventoryItem[] = [
+  { id: 1, name: "Classic Veg Burger", category: "Food", stock: 168, reorderPoint: 45, weeklySales: 19, daysInStock: 31, unitPrice: 149, recommendedDiscount: 20, status: "Overstock", applied: false },
+  { id: 2, name: "Cold Coffee", category: "Beverages", stock: 124, reorderPoint: 35, weeklySales: 24, daysInStock: 26, unitPrice: 129, recommendedDiscount: 15, status: "Overstock", applied: false },
+  { id: 3, name: "French Fries", category: "Food", stock: 82, reorderPoint: 40, weeklySales: 70, daysInStock: 8, unitPrice: 99, recommendedDiscount: 0, status: "Healthy", applied: false },
+  { id: 4, name: "Chocolate Shake", category: "Beverages", stock: 96, reorderPoint: 30, weeklySales: 18, daysInStock: 34, unitPrice: 159, recommendedDiscount: 25, status: "Overstock", applied: false },
+  { id: 5, name: "Paneer Wrap", category: "Food", stock: 17, reorderPoint: 35, weeklySales: 49, daysInStock: 3, unitPrice: 179, recommendedDiscount: 0, status: "Low stock", applied: false },
+  { id: 6, name: "Mineral Water", category: "Beverages", stock: 142, reorderPoint: 60, weeklySales: 112, daysInStock: 9, unitPrice: 30, recommendedDiscount: 0, status: "Healthy", applied: false },
+];
+
+type ExpiryBatch = {
+  id: string;
+  outlet: "central" | "north" | "south";
+  product: string;
+  batch: string;
+  category: string;
+  daysLeft: number;
+  stock: number;
+  offer: number | null;
+};
+
+const EXPIRY_BATCHES: ExpiryBatch[] = [
+  { id: "FPT-0716-A", outlet: "central", product: "Fruit Parfait", batch: "FPT-0716-A", category: "Chilled food", daysLeft: -1, stock: 14, offer: null },
+  { id: "CBL-0723-B", outlet: "central", product: "Cold Brew Latte", batch: "CBL-0723-B", category: "Beverages", daysLeft: 0, stock: 10, offer: 40 },
+  { id: "PTW-0721-A", outlet: "central", product: "Paneer Tikka Wrap", batch: "PTW-0721-A", category: "Chilled food", daysLeft: 1, stock: 18, offer: 40 },
+  { id: "MSM-0720-D", outlet: "central", product: "Mango Smoothie", batch: "MSM-0720-D", category: "Beverages", daysLeft: 2, stock: 26, offer: 25 },
+  { id: "VGS-0720-B", outlet: "central", product: "Veggie Sandwich", batch: "VGS-0720-B", category: "Fresh food", daysLeft: 2, stock: 12, offer: 25 },
+  { id: "GYC-0718-C", outlet: "north", product: "Greek Yogurt Cup", batch: "GYC-0718-C", category: "Dairy", daysLeft: 3, stock: 32, offer: 25 },
+  { id: "CSK-0719-B", outlet: "north", product: "Caesar Salad Kit", batch: "CSK-0719-B", category: "Fresh food", daysLeft: 4, stock: 0, offer: 10 },
+  { id: "WWB-0727-A", outlet: "north", product: "Whole Wheat Bun", batch: "WWB-0727-A", category: "Bakery", daysLeft: 5, stock: 8, offer: 10 },
+  { id: "CMF-0722-E", outlet: "north", product: "Chocolate Muffin", batch: "CMF-0722-E", category: "Bakery", daysLeft: 7, stock: 41, offer: 10 },
+  { id: "VLP-0725-A", outlet: "north", product: "Vanilla Latte Powder", batch: "VLP-0725-A", category: "Beverages", daysLeft: 9, stock: 24, offer: null },
+  { id: "DPC-0726-A", outlet: "south", product: "Dark Chocolate Cookie", batch: "DPC-0726-A", category: "Bakery", daysLeft: 2, stock: 36, offer: 25 },
+  { id: "SPB-0724-C", outlet: "south", product: "Spicy Potato Bowl", batch: "SPB-0724-C", category: "Fresh food", daysLeft: 3, stock: 22, offer: 25 },
+  { id: "LST-0728-B", outlet: "south", product: "Lemon Iced Tea", batch: "LST-0728-B", category: "Beverages", daysLeft: 6, stock: 48, offer: 10 },
+  { id: "YGB-0721-A", outlet: "south", product: "Yogurt Granola Bowl", batch: "YGB-0721-A", category: "Chilled food", daysLeft: -1, stock: 9, offer: null },
+  { id: "BRC-0729-D", outlet: "south", product: "Brownie Cup", batch: "BRC-0729-D", category: "Bakery", daysLeft: 8, stock: 30, offer: null },
+];
+
+type StockHealthItem = {
+  outlet: "central" | "north" | "south";
+  product: string;
+  sku: string;
+  onHand: number;
+  dailyUse: number;
+  reorder: number;
+  recommendation: string;
+  urgent: boolean;
+};
+
+const STOCK_HEALTH: StockHealthItem[] = [
+  { outlet: "north", product: "Whole Wheat Bun", sku: "WWB-0727-A", onHand: 8, dailyUse: 18, reorder: 30, recommendation: "Reorder 76", urgent: false },
+  { outlet: "north", product: "Caesar Salad Kit", sku: "CSK-0719-B", onHand: 0, dailyUse: 5, reorder: 12, recommendation: "Order 27 now", urgent: true },
+  { outlet: "central", product: "Cold Brew Latte", sku: "CBL-0723-B", onHand: 10, dailyUse: 9, reorder: 20, recommendation: "Reorder 37", urgent: false },
+  { outlet: "central", product: "Fruit Parfait", sku: "FPT-0716-A", onHand: 14, dailyUse: 6, reorder: 18, recommendation: "Remove expired batch", urgent: true },
+  { outlet: "central", product: "Paneer Tikka Wrap", sku: "PTW-0721-A", onHand: 18, dailyUse: 11, reorder: 25, recommendation: "Reorder 40", urgent: false },
+  { outlet: "south", product: "Spicy Potato Bowl", sku: "SPB-0724-C", onHand: 22, dailyUse: 14, reorder: 28, recommendation: "Reorder 48", urgent: false },
+  { outlet: "south", product: "Lemon Iced Tea", sku: "LST-0728-B", onHand: 48, dailyUse: 16, reorder: 35, recommendation: "Stock healthy", urgent: false },
+  { outlet: "south", product: "Veg Patty", sku: "VPT-0730-A", onHand: 6, dailyUse: 20, reorder: 30, recommendation: "Order 84 now", urgent: true },
+];
+
+const INVENTORY_OUTLETS = {
+  all: "All outlets",
+  central: "Central outlet",
+  north: "North outlet",
+  south: "South outlet",
+} as const;
+
+type StaffMember = {
+  id: number;
+  name: string;
+  initials: string;
+  role: string;
+  outlet: "central" | "north" | "south";
+  attendance: number;
+  performance: number;
+  shift: string;
+  status: "Present" | "Late" | "Leave" | "Absent";
+  skills: string[];
+  training: number;
+};
+
+const STAFF_MEMBERS: StaffMember[] = [
+  { id: 1, name: "Ananya Sharma", initials: "AS", role: "Shift Lead", outlet: "central", attendance: 98, performance: 94, shift: "09:00 – 17:00", status: "Present", skills: ["Leadership", "POS", "Food safety"], training: 100 },
+  { id: 2, name: "Rohan Mehta", initials: "RM", role: "Barista", outlet: "central", attendance: 92, performance: 88, shift: "10:00 – 18:00", status: "Late", skills: ["Coffee craft", "POS"], training: 78 },
+  { id: 3, name: "Priya Nair", initials: "PN", role: "Kitchen Associate", outlet: "north", attendance: 97, performance: 91, shift: "08:00 – 16:00", status: "Present", skills: ["Food prep", "Food safety"], training: 92 },
+  { id: 4, name: "Kabir Singh", initials: "KS", role: "Service Associate", outlet: "north", attendance: 85, performance: 76, shift: "12:00 – 20:00", status: "Leave", skills: ["Customer service", "POS"], training: 60 },
+  { id: 5, name: "Meera Iyer", initials: "MI", role: "Cashier", outlet: "south", attendance: 99, performance: 96, shift: "11:00 – 19:00", status: "Present", skills: ["POS", "Customer service"], training: 100 },
+  { id: 6, name: "Arjun Patel", initials: "AP", role: "Kitchen Associate", outlet: "south", attendance: 89, performance: 82, shift: "14:00 – 22:00", status: "Absent", skills: ["Food prep"], training: 45 },
+];
+
+const STAFF_OUTLETS = { all: "All outlets", central: "Central outlet", north: "North outlet", south: "South outlet" } as const;
 
 // ─── AI Insight Engine ─────────────────────────────────────────────────────────
 // Mathematical Formulas Used:
@@ -358,8 +466,15 @@ function InsightIcon({ name }: { name: AiInsight["icon"] }) {
   return <Icons.Stable />;
 }
 
+type AuthenticatedUser = {
+  id: number;
+  name: string;
+  email: string;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Home() {
+  const router = useRouter();
   const [sidebarOpen,    setSidebarOpen]    = useState(true);
   const [selectedStep,   setSelectedStep]   = useState(3);
   const [activeFeature,  setActiveFeature]  = useState("monitor");
@@ -376,6 +491,116 @@ export default function Home() {
   const [salesRecords, setSalesRecords] = useState<any[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [isUsingFallback, setIsUsingFallback] = useState(false);
+  const [authenticatedUser, setAuthenticatedUser] = useState<AuthenticatedUser | null>(null);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(INITIAL_INVENTORY);
+  const [inventoryTab, setInventoryTab] = useState<"offers" | "health">("offers");
+  const [inventoryOutlet, setInventoryOutlet] = useState("all");
+  const [activatedOffers, setActivatedOffers] = useState<string[]>([]);
+  const [staffOutlet, setStaffOutlet] = useState("all");
+  const [staffTab, setStaffTab] = useState<"overview" | "attendance" | "skills">("overview");
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>(STAFF_MEMBERS);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("module") === "staff") {
+      setSelectedStep(5);
+    }
+  }, []);
+
+  const inventorySummary = useMemo(() => {
+    const recommendations = inventoryItems.filter(item => item.recommendedDiscount > 0);
+    return {
+      overstock: inventoryItems.filter(item => item.status === "Overstock").length,
+      lowStock: inventoryItems.filter(item => item.status === "Low stock").length,
+      applied: recommendations.filter(item => item.applied).length,
+      recoverableValue: recommendations.reduce((sum, item) => sum + item.stock * item.unitPrice, 0),
+    };
+  }, [inventoryItems]);
+
+  const applyDiscount = (id: number) => {
+    setInventoryItems(items => items.map(item =>
+      item.id === id ? { ...item, applied: !item.applied } : item
+    ));
+  };
+
+  const applyAllDiscounts = () => {
+    setInventoryItems(items => items.map(item =>
+      item.recommendedDiscount > 0 ? { ...item, applied: true } : item
+    ));
+  };
+
+  const activateOffer = (id: string) => {
+    setActivatedOffers(current => current.includes(id) ? current : [...current, id]);
+  };
+
+  const selectedInventoryBatches = useMemo(
+    () => EXPIRY_BATCHES.filter(item => inventoryOutlet === "all" || item.outlet === inventoryOutlet),
+    [inventoryOutlet]
+  );
+
+  const selectedStockHealth = useMemo(
+    () => STOCK_HEALTH.filter(item => inventoryOutlet === "all" || item.outlet === inventoryOutlet),
+    [inventoryOutlet]
+  );
+
+  const inventoryMetrics = useMemo(() => {
+    const nearExpiry = selectedInventoryBatches.filter(item => item.daysLeft >= 0 && item.daysLeft <= 7);
+    const lowStock = selectedStockHealth.filter(item => item.onHand <= item.reorder);
+    return {
+      tracked: selectedInventoryBatches.length,
+      nearExpiry: nearExpiry.length,
+      lowStock: lowStock.length,
+      stockouts: selectedStockHealth.filter(item => item.onHand === 0).length,
+      atRiskValue: selectedInventoryBatches
+        .filter(item => item.daysLeft <= 7)
+        .reduce((total, item) => total + item.stock * 145, 0),
+    };
+  }, [selectedInventoryBatches, selectedStockHealth]);
+
+  const selectedStaff = useMemo(
+    () => staffMembers.filter(member => staffOutlet === "all" || member.outlet === staffOutlet),
+    [staffMembers, staffOutlet]
+  );
+
+  const staffMetrics = useMemo(() => {
+    const total = selectedStaff.length || 1;
+    const present = selectedStaff.filter(member => member.status === "Present" || member.status === "Late").length;
+    return {
+      present,
+      attendance: Math.round(selectedStaff.reduce((sum, member) => sum + member.attendance, 0) / total),
+      performance: Math.round(selectedStaff.reduce((sum, member) => sum + member.performance, 0) / total),
+      training: Math.round(selectedStaff.reduce((sum, member) => sum + member.training, 0) / total),
+      needsAttention: selectedStaff.filter(member => member.attendance < 90 || member.performance < 80 || member.training < 70).length,
+    };
+  }, [selectedStaff]);
+
+  const updateStaffStatus = (id: number, status: StaffMember["status"]) => {
+    setStaffMembers(members => members.map(member => member.id === id ? { ...member, status } : member));
+  };
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("franchiseops_user");
+    if (!storedUser) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      const user = JSON.parse(storedUser) as AuthenticatedUser;
+      if (!user.name || !user.email) throw new Error("Invalid user session");
+      setAuthenticatedUser(user);
+    } catch {
+      localStorage.removeItem("franchiseops_user");
+      localStorage.removeItem("franchiseops_token");
+      router.replace("/login");
+    }
+  }, [router]);
+
+  const signOut = () => {
+    localStorage.removeItem("franchiseops_user");
+    localStorage.removeItem("franchiseops_token");
+    setAuthenticatedUser(null);
+    router.replace("/login");
+  };
 
   // ── Date filter ────────────────────────────────────────────────────────────
   const dateFilters = useMemo(() => {
@@ -520,6 +745,8 @@ export default function Home() {
     return computeAiInsights(trendsData, salesRecords, selectedOutletName);
   }, [trendsData, salesRecords, loading, selectedOutletName]);
 
+  if (!authenticatedUser) return null;
+
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800 antialiased font-sans overflow-hidden">
 
@@ -661,6 +888,25 @@ export default function Home() {
                 <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300">
                   Planned Module
                 </span>
+              )}
+              {authenticatedUser ? (
+                <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-100 text-xs font-black text-indigo-700" aria-hidden="true">
+                    {authenticatedUser.name.charAt(0).toUpperCase()}
+                  </span>
+                  <div className="hidden leading-tight md:block">
+                    <p className="max-w-32 truncate text-xs font-bold text-slate-800">{authenticatedUser.name}</p>
+                    <p className="max-w-36 truncate text-[10px] text-slate-500">{authenticatedUser.email}</p>
+                  </div>
+                  <button onClick={signOut} className="rounded-lg px-2 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100 hover:text-red-600">
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                <div className="hidden items-center gap-2 border-l border-slate-200 pl-3 sm:flex">
+                  <Link href="/login" className="rounded-lg px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-100 hover:text-indigo-700">Log in</Link>
+                  <Link href="/signup" className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-indigo-700">Create account</Link>
+                </div>
               )}
             </div>
           </div>
@@ -1033,6 +1279,103 @@ export default function Home() {
                   </div>
                 )}
 
+              </div>
+            ) : selectedStep === 5 ? (
+              <div className="space-y-6">
+                <section className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+                  <div><div className="flex items-center gap-2 text-indigo-700"><Icons.Staff /><span className="text-xs font-extrabold uppercase tracking-wider">Staff operations</span></div><h2 className="mt-1 text-lg font-black text-slate-900">Team readiness dashboard</h2><p className="mt-1 text-xs text-slate-500">Manage daily attendance, performance signals, skills and training coverage.</p></div>
+                  <label className="flex items-center gap-3 text-xs font-bold text-slate-500">Outlet:<select value={staffOutlet} onChange={e => setStaffOutlet(e.target.value)} className="w-52 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700">{Object.entries(STAFF_OUTLETS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                </section>
+
+                <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                  {[
+                    { label: "On duty today", value: `${staffMetrics.present}/${selectedStaff.length}`, note: "Present or checked in", tone: "bg-emerald-50 text-emerald-700" },
+                    { label: "Attendance rate", value: `${staffMetrics.attendance}%`, note: "Rolling 30 days", tone: "bg-blue-50 text-blue-700" },
+                    { label: "Performance score", value: `${staffMetrics.performance}/100`, note: "Service, quality & sales", tone: "bg-indigo-50 text-indigo-700" },
+                    { label: "Training complete", value: `${staffMetrics.training}%`, note: "Required learning paths", tone: "bg-violet-50 text-violet-700" },
+                    { label: "Needs attention", value: staffMetrics.needsAttention, note: "Attendance, skill or score risk", tone: "bg-amber-50 text-amber-700" },
+                  ].map(card => <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{card.label}</p><p className="mt-2 text-2xl font-black text-slate-900">{card.value}</p><span className={`mt-2 inline-block rounded-md px-2 py-1 text-[10px] font-bold ${card.tone}`}>{card.note}</span></div>)}
+                </section>
+
+                <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1">
+                  {([ ["overview", "Team overview"], ["attendance", "Attendance"], ["skills", "Skills & training"] ] as const).map(([tab, label]) => <button key={tab} onClick={() => setStaffTab(tab)} className={`rounded-md px-4 py-2 text-xs font-bold ${staffTab === tab ? "bg-white text-indigo-700 shadow-sm" : "text-slate-600"}`}>{label}</button>)}
+                </div>
+
+                {staffTab === "overview" && <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
+                  <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-black text-slate-900">Team performance</h3><p className="mt-1 text-xs text-slate-500">Scores combine customer feedback, task completion and sales contribution.</p></div><span className="rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">Updated today</span></div><div className="overflow-x-auto"><table className="w-full min-w-[660px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Team member</th><th className="px-4 py-3">Role</th><th className="px-4 py-3 text-center">Attendance</th><th className="px-4 py-3 text-center">Performance</th><th className="px-5 py-3 text-right">Shift</th></tr></thead><tbody className="divide-y divide-slate-100">{selectedStaff.map(member => <tr key={member.id} className="hover:bg-slate-50"><td className="px-5 py-3"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-full bg-indigo-100 text-[10px] font-black text-indigo-700">{member.initials}</span><div><p className="font-bold text-slate-900">{member.name}</p><p className="text-[10px] text-slate-500">{STAFF_OUTLETS[member.outlet]}</p></div></div></td><td className="px-4 py-3 text-slate-600">{member.role}</td><td className="px-4 py-3 text-center font-bold text-slate-700">{member.attendance}%</td><td className="px-4 py-3 text-center"><span className={`rounded-md px-2 py-1 font-black ${member.performance >= 90 ? "bg-emerald-50 text-emerald-700" : member.performance >= 80 ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}>{member.performance}</span></td><td className="px-5 py-3 text-right font-medium text-slate-600">{member.shift}</td></tr>)}</tbody></table></div></section>
+                  <aside className="rounded-xl border border-amber-200 bg-amber-50 p-5"><h3 className="font-black text-amber-950">Manager actions</h3><p className="mt-1 text-xs text-amber-800">Prioritized from today’s team signals.</p><div className="mt-4 space-y-3"><div className="rounded-lg bg-white/80 p-3"><p className="text-xs font-bold text-slate-900">Backfill south outlet</p><p className="mt-1 text-[11px] text-slate-600">Arjun is absent for the evening kitchen shift. Assign a trained associate before 14:00.</p></div><div className="rounded-lg bg-white/80 p-3"><p className="text-xs font-bold text-slate-900">Coach Kabir on service recovery</p><p className="mt-1 text-[11px] text-slate-600">Performance and attendance are below target; schedule a check-in this week.</p></div><div className="rounded-lg bg-white/80 p-3"><p className="text-xs font-bold text-slate-900">Recognize Meera</p><p className="mt-1 text-[11px] text-slate-600">Strongest performance and complete training. Consider her for cross-training.</p></div></div></aside>
+                </div>}
+
+                {staffTab === "attendance" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4"><h3 className="font-black text-slate-900">Today’s attendance register</h3><p className="mt-1 text-xs text-slate-500">Update the check-in status and immediately see coverage risks.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Team member</th><th className="px-4 py-3">Scheduled shift</th><th className="px-4 py-3 text-center">30-day attendance</th><th className="px-5 py-3 text-right">Today’s status</th></tr></thead><tbody className="divide-y divide-slate-100">{selectedStaff.map(member => <tr key={member.id} className="hover:bg-slate-50"><td className="px-5 py-3"><p className="font-bold text-slate-900">{member.name}</p><p className="mt-0.5 text-[10px] text-slate-500">{member.role}</p></td><td className="px-4 py-3 text-slate-600">{member.shift}</td><td className="px-4 py-3 text-center font-bold text-slate-700">{member.attendance}%</td><td className="px-5 py-3 text-right"><select aria-label={`Attendance status for ${member.name}`} value={member.status} onChange={e => updateStaffStatus(member.id, e.target.value as StaffMember["status"])} className={`rounded-md border px-3 py-2 text-xs font-bold ${member.status === "Present" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : member.status === "Late" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-red-200 bg-red-50 text-red-700"}`}><option>Present</option><option>Late</option><option>Leave</option><option>Absent</option></select></td></tr>)}</tbody></table></div></section>}
+
+                {staffTab === "skills" && <div className="grid gap-6 lg:grid-cols-2"><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4"><h3 className="font-black text-slate-900">Skills coverage</h3><p className="mt-1 text-xs text-slate-500">Use these skills to make safer shift assignments.</p></div><div className="divide-y divide-slate-100">{selectedStaff.map(member => <div key={member.id} className="flex items-center justify-between gap-4 px-5 py-4"><div><p className="text-xs font-bold text-slate-900">{member.name}</p><div className="mt-2 flex flex-wrap gap-1.5">{member.skills.map(skill => <span key={skill} className="rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">{skill}</span>)}</div></div><span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{member.role}</span></div>)}</div></section><section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-black text-slate-900">Training progress</h3><p className="mt-1 text-xs text-slate-500">Mandatory paths: food safety, service standards and POS operations.</p><div className="mt-5 space-y-4">{selectedStaff.map(member => <div key={member.id}><div className="flex justify-between text-xs"><span className="font-bold text-slate-700">{member.name}</span><span className={`font-black ${member.training >= 90 ? "text-emerald-600" : member.training >= 70 ? "text-indigo-600" : "text-amber-600"}`}>{member.training}%</span></div><div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${member.training >= 90 ? "bg-emerald-500" : member.training >= 70 ? "bg-indigo-500" : "bg-amber-500"}`} style={{ width: `${member.training}%` }} /></div></div>)}</div><div className="mt-6 rounded-lg bg-violet-50 p-3 text-xs text-violet-900"><span className="font-black">Recommended next step: </span>Enroll Arjun in food-safety refresher training before assigning food-prep shifts.</div></section></div>}
+              </div>
+            ) : selectedStep === 4 ? (
+              <div className="space-y-6">
+                <section className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div><h2 className="text-base font-black text-slate-900">Inventory control center</h2><p className="mt-1 text-xs text-slate-500">Batch-level stock, expiry risk, and recovery offers.</p></div>
+                  <label className="flex items-center gap-3 text-xs font-bold text-slate-500">Outlet:<select value={inventoryOutlet} onChange={e => setInventoryOutlet(e.target.value)} className="w-52 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700">{Object.entries(INVENTORY_OUTLETS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                </section>
+                <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {[{ label: "Tracked batches", value: inventoryMetrics.tracked, note: "In selected outlet", tone: "bg-indigo-50 text-indigo-700" }, { label: "Near-expiry batches", value: inventoryMetrics.nearExpiry, note: "Expires within 7 days", tone: "bg-amber-50 text-amber-700" }, { label: "Low-stock alerts", value: inventoryMetrics.lowStock, note: "At or below reorder level", tone: "bg-orange-50 text-orange-700" }, { label: "Stockouts", value: inventoryMetrics.stockouts, note: "Require replenishment", tone: "bg-red-50 text-red-700" }].map(card => <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{card.label}</p><p className="mt-2 text-3xl font-black text-slate-900">{card.value}</p><span className={`mt-2 inline-block rounded-md px-2 py-1 text-[10px] font-bold ${card.tone}`}>{card.note}</span></div>)}
+                </section>
+                <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1"><button onClick={() => setInventoryTab("offers")} className={`rounded-md px-4 py-2 text-xs font-bold ${inventoryTab === "offers" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-600"}`}>Near-expiry offers</button><button onClick={() => setInventoryTab("health")} className={`rounded-md px-4 py-2 text-xs font-bold ${inventoryTab === "health" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-600"}`}>Stock health</button></div>
+                {inventoryTab === "offers" ? <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-black text-slate-900">Near-expiry recovery offers</h3><p className="mt-1 text-xs text-slate-500">{INVENTORY_OUTLETS[inventoryOutlet as keyof typeof INVENTORY_OUTLETS]} · Potential at-risk value: {formatCurrency(inventoryMetrics.atRiskValue)}</p></div><span className="w-fit rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">Rules: 7d 10% | 3d 25% | 1d 40%</span></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Product / batch</th><th className="px-4 py-3">Expiry</th><th className="px-4 py-3 text-center">Stock</th><th className="px-4 py-3 text-center">Offer</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{selectedInventoryBatches.map(item => { const active = activatedOffers.includes(item.id); return <tr key={item.id} className="hover:bg-slate-50"><td className="px-5 py-3"><p className="font-bold text-slate-900">{item.product}</p><p className="mt-0.5 text-[10px] text-slate-500">{item.batch} | {item.category}</p></td><td className="px-4 py-3">{item.daysLeft < 0 ? <span className="font-bold text-red-700">Expired</span> : <span className="rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">{item.daysLeft} days left</span>}</td><td className="px-4 py-3 text-center font-bold text-slate-700">{item.stock} units</td><td className="px-4 py-3 text-center font-black text-indigo-700">{item.offer ? `${item.offer}% off` : "Blocked"}</td><td className="px-5 py-3 text-right">{item.daysLeft < 0 ? <span className="text-[10px] font-bold text-red-600">Remove from sale</span> : item.offer ? <button onClick={() => activateOffer(item.id)} className={`rounded-md px-3 py-2 text-[10px] font-bold ${active ? "bg-emerald-100 text-emerald-700" : "bg-indigo-600 text-white"}`}>{active ? "Offer active" : `Activate ${item.offer}% offer`}</button> : "—"}</td></tr>})}</tbody></table></div></section> : <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4"><h3 className="font-black text-slate-900">Stock health and replenishment</h3><p className="mt-1 text-xs text-slate-500">Suggested reorder quantity covers three days of expected use.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Product</th><th className="px-4 py-3 text-center">On hand</th><th className="px-4 py-3 text-center">Daily use</th><th className="px-4 py-3 text-center">Reorder level</th><th className="px-5 py-3 text-right">Recommendation</th></tr></thead><tbody className="divide-y divide-slate-100">{selectedStockHealth.map(item => <tr key={item.sku}><td className="px-5 py-3"><p className="font-bold text-slate-900">{item.product}</p><p className="mt-0.5 text-[10px] text-slate-500">{item.sku}</p></td><td className={`px-4 py-3 text-center font-black ${item.onHand === 0 ? "text-red-600" : item.onHand <= item.reorder ? "text-orange-600" : "text-emerald-600"}`}>{item.onHand}</td><td className="px-4 py-3 text-center text-slate-600">{item.dailyUse} units</td><td className="px-4 py-3 text-center text-slate-600">{item.reorder}</td><td className={`px-5 py-3 text-right font-bold ${item.urgent ? "text-red-600" : item.onHand <= item.reorder ? "text-orange-600" : "text-emerald-600"}`}>{item.recommendation}</td></tr>)}</tbody></table></div></section>}
+                {false && <>
+                <div className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-white p-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-indigo-700"><Icons.Inventory /><span className="text-xs font-extrabold uppercase tracking-wider">Inventory Agent</span></div>
+                    <h2 className="mt-2 text-2xl font-black text-slate-900">Stock-aware discount recommendations</h2>
+                    <p className="mt-1 text-sm text-slate-600">Discount only slow-moving overstock. Low-stock items are automatically protected.</p>
+                  </div>
+                  <button onClick={applyAllDiscounts} className="rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-indigo-700">
+                    Apply all recommended discounts
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    { label: "Overstocked items", value: inventorySummary.overstock, detail: "Eligible for a promotion", color: "text-amber-600 bg-amber-50" },
+                    { label: "Low-stock items", value: inventorySummary.lowStock, detail: "Discounts blocked", color: "text-red-600 bg-red-50" },
+                    { label: "Discounts applied", value: inventorySummary.applied, detail: "Live promotion decisions", color: "text-emerald-600 bg-emerald-50" },
+                    { label: "At-risk stock value", value: formatCurrency(inventorySummary.recoverableValue), detail: "Value in recommended items", color: "text-indigo-600 bg-indigo-50" },
+                  ].map(card => (
+                    <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{card.label}</p>
+                      <p className={`mt-2 inline-block rounded-lg px-2 py-1 text-2xl font-black ${card.color}`}>{card.value}</p>
+                      <p className="mt-2 text-xs text-slate-500">{card.detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex flex-col gap-1 border-b border-slate-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div><h3 className="font-black text-slate-900">Product stock & discount queue</h3><p className="text-xs text-slate-500">Recommendations use stock cover, sales velocity, and time in inventory.</p></div>
+                    <span className="mt-2 w-fit rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold text-slate-600 sm:mt-0">Auto-protection enabled</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[850px] text-left text-xs">
+                      <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500"><tr><th className="px-6 py-3">Product</th><th className="px-4 py-3 text-right">Stock</th><th className="px-4 py-3 text-right">Weekly sales</th><th className="px-4 py-3 text-right">Days held</th><th className="px-4 py-3">Stock status</th><th className="px-4 py-3">AI recommendation</th><th className="px-6 py-3 text-right">Action</th></tr></thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {inventoryItems.map(item => {
+                          const isEligible = item.recommendedDiscount > 0;
+                          const statusClass = item.status === "Overstock" ? "bg-amber-50 text-amber-700" : item.status === "Low stock" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700";
+                          return <tr key={item.id} className="hover:bg-slate-50/70">
+                            <td className="px-6 py-4"><p className="font-bold text-slate-900">{item.name}</p><p className="mt-0.5 text-slate-500">{item.category} · {formatCurrency(item.unitPrice)}</p></td>
+                            <td className="px-4 py-4 text-right font-bold text-slate-700">{item.stock}<span className="ml-1 font-normal text-slate-400">/ min {item.reorderPoint}</span></td>
+                            <td className="px-4 py-4 text-right font-medium text-slate-600">{item.weeklySales}</td>
+                            <td className="px-4 py-4 text-right font-medium text-slate-600">{item.daysInStock} days</td>
+                            <td className="px-4 py-4"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${statusClass}`}>{item.status}</span></td>
+                            <td className="px-4 py-4">{isEligible ? <span className="font-black text-indigo-700">Offer {item.recommendedDiscount}% off</span> : <span className="font-semibold text-slate-500">No discount — protect stock</span>}</td>
+                            <td className="px-6 py-4 text-right">{isEligible ? <button onClick={() => applyDiscount(item.id)} className={`rounded-lg px-3 py-2 text-[10px] font-bold transition-colors ${item.applied ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : "bg-indigo-600 text-white hover:bg-indigo-700"}`}>{item.applied ? "Applied ✓" : `Apply ${item.recommendedDiscount}%`}</button> : <span className="text-[10px] font-bold text-red-500">Blocked</span>}</td>
+                          </tr>;
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs text-blue-900"><span className="font-black">How it works: </span>The agent only proposes a discount when stock is above the reorder point and sales velocity is slow. It never applies a discount to low-stock products.</div>
+                </>}
               </div>
             ) : (
               /* Placeholder screen for non-active steps */

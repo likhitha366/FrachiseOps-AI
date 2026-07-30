@@ -1,7 +1,8 @@
 const { Client } = require('pg');
+require('dotenv').config();
 
 const client = new Client({
-  connectionString: "postgresql://postgres:admin123@localhost:5432/franchiseAIDB?schema=public"
+  connectionString: process.env.DATABASE_URL
 });
 
 async function main() {

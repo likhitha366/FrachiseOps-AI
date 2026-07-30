@@ -1,10 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const fs = require('fs/promises');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'change-this-development-secret';
+const AUTH_STORE_PATH = process.env.AUTH_STORE_PATH || path.join(__dirname, 'data', 'users.json');
 
 // Enable CORS for frontend communication
 app.use(cors());
@@ -22,6 +28,134 @@ pool.connect((err, client, release) => {
   }
   console.log('Successfully connected to database');
   release();
+});
+
+async function ensureUsersTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      full_name VARCHAR(120) NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+}
+
+const createToken = (user) => jwt.sign(
+  { userId: user.id, email: user.email, name: user.full_name },
+  JWT_SECRET,
+  { expiresIn: '8h' }
+);
+
+// Keep authentication usable during local development when PostgreSQL has not
+// been configured. The dashboard already has a data fallback, so this mirrors
+// that behavior for accounts without masking database errors in production.
+const isDatabaseUnavailable = (error) => Boolean(error && [
+  '28P01', // invalid password
+  '3D000', // database does not exist
+  'ECONNREFUSED',
+  'ENOTFOUND',
+].includes(error.code));
+
+async function readLocalUsers() {
+  try {
+    return JSON.parse(await fs.readFile(AUTH_STORE_PATH, 'utf8'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+async function writeLocalUsers(users) {
+  await fs.mkdir(path.dirname(AUTH_STORE_PATH), { recursive: true });
+  await fs.writeFile(AUTH_STORE_PATH, JSON.stringify(users, null, 2), 'utf8');
+}
+
+async function createLocalUser(name, email, password) {
+  const users = await readLocalUsers();
+  const normalizedEmail = email.trim().toLowerCase();
+  if (users.some((user) => user.email === normalizedEmail)) {
+    const duplicateError = new Error('An account already exists for this email.');
+    duplicateError.code = '23505';
+    throw duplicateError;
+  }
+
+  const user = {
+    id: users.reduce((maximumId, currentUser) => Math.max(maximumId, currentUser.id || 0), 0) + 1,
+    full_name: name.trim(),
+    email: normalizedEmail,
+    password_hash: await bcrypt.hash(password, 12),
+  };
+  await writeLocalUsers([...users, user]);
+  return user;
+}
+
+async function findLocalUser(email) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const users = await readLocalUsers();
+  return users.find((user) => user.email === normalizedEmail);
+}
+
+// Authentication endpoints used by the frontend Login and Sign-up screens.
+app.post('/api/auth/signup', async (req, res) => {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password || password.length < 6) {
+    return res.status(400).json({ error: 'Name, email, and a password of at least 6 characters are required.' });
+  }
+  try {
+    await ensureUsersTable();
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await pool.query(
+      'INSERT INTO users (full_name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, full_name, email',
+      [name.trim(), email.trim().toLowerCase(), passwordHash]
+    );
+    const user = result.rows[0];
+    res.status(201).json({ token: createToken(user), user: { id: user.id, name: user.full_name, email: user.email } });
+  } catch (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'An account already exists for this email.' });
+    if (isDatabaseUnavailable(error)) {
+      try {
+        const user = await createLocalUser(name, email, password);
+        console.warn('PostgreSQL unavailable; created account in the local development store.');
+        return res.status(201).json({ token: createToken(user), user: { id: user.id, name: user.full_name, email: user.email } });
+      } catch (fallbackError) {
+        if (fallbackError.code === '23505') return res.status(409).json({ error: fallbackError.message });
+        console.error('Local sign-up fallback error:', fallbackError);
+      }
+    }
+    console.error('Sign-up error:', error);
+    res.status(500).json({ error: 'Unable to create your account. Please try again.' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
+  try {
+    await ensureUsersTable();
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email.trim().toLowerCase()]);
+    const user = result.rows[0];
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({ error: 'Incorrect email or password.' });
+    }
+    res.json({ token: createToken(user), user: { id: user.id, name: user.full_name, email: user.email } });
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) {
+      try {
+        const user = await findLocalUser(email);
+        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+          return res.status(401).json({ error: 'Incorrect email or password.' });
+        }
+        console.warn('PostgreSQL unavailable; signed in with the local development store.');
+        return res.json({ token: createToken(user), user: { id: user.id, name: user.full_name, email: user.email } });
+      } catch (fallbackError) {
+        console.error('Local login fallback error:', fallbackError);
+      }
+    }
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Unable to sign in. Please try again.' });
+  }
 });
 
 // Helper: build date/outlet filter SQL conditions
@@ -255,6 +389,8 @@ app.get('/api/sales/list', async (req, res) => {
 });
 
 // Start Server
+ensureUsersTable().catch(error => console.error('Could not create users table:', error.message));
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
