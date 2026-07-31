@@ -268,18 +268,32 @@ type StaffMember = {
   status: "Present" | "Late" | "Leave" | "Absent";
   skills: string[];
   training: number;
+  salary: number;
+  phone: string;
+  email: string;
 };
 
 const STAFF_MEMBERS: StaffMember[] = [
-  { id: 1, name: "Ananya Sharma", initials: "AS", role: "Shift Lead", outlet: "central", attendance: 98, performance: 94, shift: "09:00 – 17:00", status: "Present", skills: ["Leadership", "POS", "Food safety"], training: 100 },
-  { id: 2, name: "Rohan Mehta", initials: "RM", role: "Barista", outlet: "central", attendance: 92, performance: 88, shift: "10:00 – 18:00", status: "Late", skills: ["Coffee craft", "POS"], training: 78 },
-  { id: 3, name: "Priya Nair", initials: "PN", role: "Kitchen Associate", outlet: "north", attendance: 97, performance: 91, shift: "08:00 – 16:00", status: "Present", skills: ["Food prep", "Food safety"], training: 92 },
-  { id: 4, name: "Kabir Singh", initials: "KS", role: "Service Associate", outlet: "north", attendance: 85, performance: 76, shift: "12:00 – 20:00", status: "Leave", skills: ["Customer service", "POS"], training: 60 },
-  { id: 5, name: "Meera Iyer", initials: "MI", role: "Cashier", outlet: "south", attendance: 99, performance: 96, shift: "11:00 – 19:00", status: "Present", skills: ["POS", "Customer service"], training: 100 },
-  { id: 6, name: "Arjun Patel", initials: "AP", role: "Kitchen Associate", outlet: "south", attendance: 89, performance: 82, shift: "14:00 – 22:00", status: "Absent", skills: ["Food prep"], training: 45 },
+  { id: 1, name: "Ananya Sharma", initials: "AS", role: "Shift Lead", outlet: "central", attendance: 98, performance: 94, shift: "09:00 – 17:00", status: "Present", skills: ["Leadership", "POS", "Food safety"], training: 100, salary: 52000, phone: "+91 98765 21001", email: "ananya.sharma@franchiseops.example" },
+  { id: 2, name: "Rohan Mehta", initials: "RM", role: "Barista", outlet: "central", attendance: 92, performance: 88, shift: "10:00 – 18:00", status: "Late", skills: ["Coffee craft", "POS"], training: 78, salary: 31000, phone: "+91 98765 21002", email: "rohan.mehta@franchiseops.example" },
+  { id: 3, name: "Priya Nair", initials: "PN", role: "Kitchen Associate", outlet: "north", attendance: 97, performance: 91, shift: "08:00 – 16:00", status: "Present", skills: ["Food prep", "Food safety"], training: 92, salary: 34000, phone: "+91 98765 21003", email: "priya.nair@franchiseops.example" },
+  { id: 4, name: "Kabir Singh", initials: "KS", role: "Service Associate", outlet: "north", attendance: 85, performance: 76, shift: "12:00 – 20:00", status: "Leave", skills: ["Customer service", "POS"], training: 60, salary: 29000, phone: "+91 98765 21004", email: "kabir.singh@franchiseops.example" },
+  { id: 5, name: "Meera Iyer", initials: "MI", role: "Cashier", outlet: "south", attendance: 99, performance: 96, shift: "11:00 – 19:00", status: "Present", skills: ["POS", "Customer service"], training: 100, salary: 32000, phone: "+91 98765 21005", email: "meera.iyer@franchiseops.example" },
+  { id: 6, name: "Arjun Patel", initials: "AP", role: "Kitchen Associate", outlet: "south", attendance: 89, performance: 82, shift: "14:00 – 22:00", status: "Absent", skills: ["Food prep"], training: 45, salary: 33000, phone: "+91 98765 21006", email: "arjun.patel@franchiseops.example" },
 ];
 
 const STAFF_OUTLETS = { all: "All outlets", central: "Central outlet", north: "North outlet", south: "South outlet" } as const;
+const STAFF_JOINING_DATES: Record<number, string> = { 1: "18 Apr 2022", 2: "09 Jan 2023", 3: "22 Nov 2021", 4: "12 Feb 2024", 5: "01 Aug 2022", 6: "17 Mar 2025" };
+const OUTLET_LOCATIONS = {
+  central: { name: "Central outlet", address: "Connaught Place, New Delhi", query: "Connaught Place, New Delhi" },
+  north: { name: "North outlet", address: "Sector 18, Noida, Uttar Pradesh", query: "Sector 18, Noida, Uttar Pradesh" },
+  south: { name: "South outlet", address: "Saket, New Delhi", query: "Saket, New Delhi" },
+} as const;
+const LAST_WEEK_ATTENDANCE = [
+  { day: "Mon", central: 100, north: 92, south: 88, all: 93 }, { day: "Tue", central: 100, north: 100, south: 88, all: 96 },
+  { day: "Wed", central: 92, north: 92, south: 100, all: 94 }, { day: "Thu", central: 100, north: 83, south: 100, all: 94 },
+  { day: "Fri", central: 92, north: 92, south: 88, all: 91 }, { day: "Sat", central: 100, north: 100, south: 100, all: 100 }, { day: "Sun", central: 100, north: 92, south: 100, all: 97 },
+] as const;
 
 // ─── AI Insight Engine ─────────────────────────────────────────────────────────
 // Mathematical Formulas Used:
@@ -492,12 +506,13 @@ export default function Home() {
   const [loading,    setLoading]    = useState(true);
   const [isUsingFallback, setIsUsingFallback] = useState(false);
   const [authenticatedUser, setAuthenticatedUser] = useState<AuthenticatedUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(INITIAL_INVENTORY);
   const [inventoryTab, setInventoryTab] = useState<"offers" | "health">("offers");
   const [inventoryOutlet, setInventoryOutlet] = useState("all");
   const [activatedOffers, setActivatedOffers] = useState<string[]>([]);
   const [staffOutlet, setStaffOutlet] = useState("all");
-  const [staffTab, setStaffTab] = useState<"overview" | "attendance" | "skills">("overview");
+  const [staffTab, setStaffTab] = useState<"overview" | "attendance" | "contacts" | "skills" | "locations">("overview");
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>(STAFF_MEMBERS);
 
   useEffect(() => {
@@ -569,30 +584,31 @@ export default function Home() {
       attendance: Math.round(selectedStaff.reduce((sum, member) => sum + member.attendance, 0) / total),
       performance: Math.round(selectedStaff.reduce((sum, member) => sum + member.performance, 0) / total),
       training: Math.round(selectedStaff.reduce((sum, member) => sum + member.training, 0) / total),
+      monthlyPayroll: selectedStaff.reduce((sum, member) => sum + member.salary, 0),
       needsAttention: selectedStaff.filter(member => member.attendance < 90 || member.performance < 80 || member.training < 70).length,
     };
   }, [selectedStaff]);
+
+  const weeklyAttendance = useMemo(() => LAST_WEEK_ATTENDANCE.map(day => ({ day: day.day, rate: day[staffOutlet as keyof typeof day] as number })), [staffOutlet]);
+  const attendanceStreak = useMemo(() => { let streak = 0; for (const day of [...weeklyAttendance].reverse()) { if (day.rate < 90) break; streak++; } return streak; }, [weeklyAttendance]);
 
   const updateStaffStatus = (id: number, status: StaffMember["status"]) => {
     setStaffMembers(members => members.map(member => member.id === id ? { ...member, status } : member));
   };
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("franchiseops_user");
-    if (!storedUser) {
+    const storedToken = localStorage.getItem("franchiseops_token");
+    if (!storedToken) {
+      setAuthChecked(true);
       router.replace("/login");
       return;
     }
-
-    try {
-      const user = JSON.parse(storedUser) as AuthenticatedUser;
-      if (!user.name || !user.email) throw new Error("Invalid user session");
-      setAuthenticatedUser(user);
-    } catch {
-      localStorage.removeItem("franchiseops_user");
-      localStorage.removeItem("franchiseops_token");
-      router.replace("/login");
-    }
+    void fetch(`${BACKEND_URL}/auth/session`, { headers: { Authorization: `Bearer ${storedToken}` } }).then(async response => {
+      const data = await response.json();
+      if (!response.ok || !data.user?.name || !data.user?.email) throw new Error("Invalid session");
+      setAuthenticatedUser(data.user as AuthenticatedUser);
+      localStorage.setItem("franchiseops_user", JSON.stringify(data.user));
+    }).catch(() => { localStorage.removeItem("franchiseops_user"); localStorage.removeItem("franchiseops_token"); router.replace("/login"); }).finally(() => setAuthChecked(true));
   }, [router]);
 
   const signOut = () => {
@@ -745,7 +761,7 @@ export default function Home() {
     return computeAiInsights(trendsData, salesRecords, selectedOutletName);
   }, [trendsData, salesRecords, loading, selectedOutletName]);
 
-  if (!authenticatedUser) return null;
+  if (!authChecked || !authenticatedUser) return <main className="grid min-h-screen place-items-center bg-slate-50 text-sm font-semibold text-slate-500">Checking your secure session…</main>;
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800 antialiased font-sans overflow-hidden">
@@ -1287,28 +1303,35 @@ export default function Home() {
                   <label className="flex items-center gap-3 text-xs font-bold text-slate-500">Outlet:<select value={staffOutlet} onChange={e => setStaffOutlet(e.target.value)} className="w-52 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700">{Object.entries(STAFF_OUTLETS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                 </section>
 
-                <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
                   {[
                     { label: "On duty today", value: `${staffMetrics.present}/${selectedStaff.length}`, note: "Present or checked in", tone: "bg-emerald-50 text-emerald-700" },
                     { label: "Attendance rate", value: `${staffMetrics.attendance}%`, note: "Rolling 30 days", tone: "bg-blue-50 text-blue-700" },
                     { label: "Performance score", value: `${staffMetrics.performance}/100`, note: "Service, quality & sales", tone: "bg-indigo-50 text-indigo-700" },
                     { label: "Training complete", value: `${staffMetrics.training}%`, note: "Required learning paths", tone: "bg-violet-50 text-violet-700" },
+                    { label: "Monthly payroll", value: `₹${staffMetrics.monthlyPayroll.toLocaleString("en-IN")}`, note: "Selected outlet team", tone: "bg-cyan-50 text-cyan-700" },
                     { label: "Needs attention", value: staffMetrics.needsAttention, note: "Attendance, skill or score risk", tone: "bg-amber-50 text-amber-700" },
                   ].map(card => <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{card.label}</p><p className="mt-2 text-2xl font-black text-slate-900">{card.value}</p><span className={`mt-2 inline-block rounded-md px-2 py-1 text-[10px] font-bold ${card.tone}`}>{card.note}</span></div>)}
                 </section>
 
                 <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1">
-                  {([ ["overview", "Team overview"], ["attendance", "Attendance"], ["skills", "Skills & training"] ] as const).map(([tab, label]) => <button key={tab} onClick={() => setStaffTab(tab)} className={`rounded-md px-4 py-2 text-xs font-bold ${staffTab === tab ? "bg-white text-indigo-700 shadow-sm" : "text-slate-600"}`}>{label}</button>)}
+                  {([ ["overview", "Team overview"], ["attendance", "Attendance"], ["contacts", "Contact & payroll"], ["skills", "Skills & training"], ["locations", "Outlet map"] ] as const).map(([tab, label]) => <button key={tab} onClick={() => setStaffTab(tab)} className={`rounded-md px-4 py-2 text-xs font-bold ${staffTab === tab ? "bg-white text-indigo-700 shadow-sm" : "text-slate-600"}`}>{label}</button>)}
                 </div>
 
-                {staffTab === "overview" && <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
+                {staffTab === "overview" && <>
+                <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
                   <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-black text-slate-900">Team performance</h3><p className="mt-1 text-xs text-slate-500">Scores combine customer feedback, task completion and sales contribution.</p></div><span className="rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">Updated today</span></div><div className="overflow-x-auto"><table className="w-full min-w-[660px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Team member</th><th className="px-4 py-3">Role</th><th className="px-4 py-3 text-center">Attendance</th><th className="px-4 py-3 text-center">Performance</th><th className="px-5 py-3 text-right">Shift</th></tr></thead><tbody className="divide-y divide-slate-100">{selectedStaff.map(member => <tr key={member.id} className="hover:bg-slate-50"><td className="px-5 py-3"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-full bg-indigo-100 text-[10px] font-black text-indigo-700">{member.initials}</span><div><p className="font-bold text-slate-900">{member.name}</p><p className="text-[10px] text-slate-500">{STAFF_OUTLETS[member.outlet]}</p></div></div></td><td className="px-4 py-3 text-slate-600">{member.role}</td><td className="px-4 py-3 text-center font-bold text-slate-700">{member.attendance}%</td><td className="px-4 py-3 text-center"><span className={`rounded-md px-2 py-1 font-black ${member.performance >= 90 ? "bg-emerald-50 text-emerald-700" : member.performance >= 80 ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}>{member.performance}</span></td><td className="px-5 py-3 text-right font-medium text-slate-600">{member.shift}</td></tr>)}</tbody></table></div></section>
                   <aside className="rounded-xl border border-amber-200 bg-amber-50 p-5"><h3 className="font-black text-amber-950">Manager actions</h3><p className="mt-1 text-xs text-amber-800">Prioritized from today’s team signals.</p><div className="mt-4 space-y-3"><div className="rounded-lg bg-white/80 p-3"><p className="text-xs font-bold text-slate-900">Backfill south outlet</p><p className="mt-1 text-[11px] text-slate-600">Arjun is absent for the evening kitchen shift. Assign a trained associate before 14:00.</p></div><div className="rounded-lg bg-white/80 p-3"><p className="text-xs font-bold text-slate-900">Coach Kabir on service recovery</p><p className="mt-1 text-[11px] text-slate-600">Performance and attendance are below target; schedule a check-in this week.</p></div><div className="rounded-lg bg-white/80 p-3"><p className="text-xs font-bold text-slate-900">Recognize Meera</p><p className="mt-1 text-[11px] text-slate-600">Strongest performance and complete training. Consider her for cross-training.</p></div></div></aside>
-                </div>}
+                </div>
+                <section className="grid gap-6 xl:grid-cols-[1.2fr_1fr]"><div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Last 7 days</p><h3 className="mt-1 font-black text-slate-900">Attendance streak</h3></div><div className="rounded-lg bg-emerald-50 px-3 py-2 text-right"><p className="text-2xl font-black text-emerald-700">{attendanceStreak}</p><p className="text-[10px] font-bold uppercase text-emerald-700">day streak</p></div></div><div className="mt-5 grid grid-cols-7 gap-2">{weeklyAttendance.map(day => <div key={day.day} className="text-center"><div className="flex h-24 items-end rounded-md bg-slate-100 p-1"><div className={`w-full rounded-sm ${day.rate >= 95 ? "bg-emerald-500" : day.rate >= 90 ? "bg-indigo-500" : "bg-amber-400"}`} style={{ height: `${day.rate}%` }} /></div><p className="mt-2 text-[10px] font-bold text-slate-500">{day.day}</p><p className="text-xs font-black text-slate-800">{day.rate}%</p></div>)}</div></div><div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h3 className="font-black text-slate-900">Staff outlet map</h3><p className="mt-1 text-xs text-slate-500">{staffOutlet === "all" ? "All staff outlets" : OUTLET_LOCATIONS[staffOutlet as keyof typeof OUTLET_LOCATIONS].address}</p></div><button onClick={() => setStaffTab("locations")} className="text-xs font-bold text-indigo-700 hover:underline">Full map</button></div><iframe title="Staff outlet map" className="h-[220px] w-full" loading="lazy" src={`https://www.google.com/maps?q=${encodeURIComponent(staffOutlet === "all" ? "New Delhi, India" : OUTLET_LOCATIONS[staffOutlet as keyof typeof OUTLET_LOCATIONS].query)}&output=embed`} /></div></section>
+                </>}
 
                 {staffTab === "attendance" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4"><h3 className="font-black text-slate-900">Today’s attendance register</h3><p className="mt-1 text-xs text-slate-500">Update the check-in status and immediately see coverage risks.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Team member</th><th className="px-4 py-3">Scheduled shift</th><th className="px-4 py-3 text-center">30-day attendance</th><th className="px-5 py-3 text-right">Today’s status</th></tr></thead><tbody className="divide-y divide-slate-100">{selectedStaff.map(member => <tr key={member.id} className="hover:bg-slate-50"><td className="px-5 py-3"><p className="font-bold text-slate-900">{member.name}</p><p className="mt-0.5 text-[10px] text-slate-500">{member.role}</p></td><td className="px-4 py-3 text-slate-600">{member.shift}</td><td className="px-4 py-3 text-center font-bold text-slate-700">{member.attendance}%</td><td className="px-5 py-3 text-right"><select aria-label={`Attendance status for ${member.name}`} value={member.status} onChange={e => updateStaffStatus(member.id, e.target.value as StaffMember["status"])} className={`rounded-md border px-3 py-2 text-xs font-bold ${member.status === "Present" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : member.status === "Late" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-red-200 bg-red-50 text-red-700"}`}><option>Present</option><option>Late</option><option>Leave</option><option>Absent</option></select></td></tr>)}</tbody></table></div></section>}
 
+                {staffTab === "locations" && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><div className="border-b border-slate-200 pb-4"><h3 className="font-black text-slate-900">Outlet locations</h3><p className="mt-1 text-xs text-slate-500">Map and directions for the selected staff outlet.</p></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.7fr_1fr]"><iframe title="Outlet location map" className="h-[360px] w-full rounded-lg border border-slate-200" loading="lazy" src={`https://www.google.com/maps?q=${encodeURIComponent(staffOutlet === "all" ? "New Delhi, India" : OUTLET_LOCATIONS[staffOutlet as keyof typeof OUTLET_LOCATIONS].query)}&output=embed`} /><div className="space-y-3">{(staffOutlet === "all" ? Object.entries(OUTLET_LOCATIONS) : [[staffOutlet, OUTLET_LOCATIONS[staffOutlet as keyof typeof OUTLET_LOCATIONS]]] as [string, (typeof OUTLET_LOCATIONS)[keyof typeof OUTLET_LOCATIONS]][]).map(([key, location]) => <div key={key} className="rounded-lg border border-slate-200 p-4"><p className="font-bold text-slate-900">{location.name}</p><p className="mt-2 text-xs text-slate-600">{location.address}</p><a className="mt-3 inline-block text-xs font-bold text-indigo-700 hover:underline" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.query)}`}>Open directions →</a></div>)}</div></div></section>}
+
                 {staffTab === "skills" && <div className="grid gap-6 lg:grid-cols-2"><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4"><h3 className="font-black text-slate-900">Skills coverage</h3><p className="mt-1 text-xs text-slate-500">Use these skills to make safer shift assignments.</p></div><div className="divide-y divide-slate-100">{selectedStaff.map(member => <div key={member.id} className="flex items-center justify-between gap-4 px-5 py-4"><div><p className="text-xs font-bold text-slate-900">{member.name}</p><div className="mt-2 flex flex-wrap gap-1.5">{member.skills.map(skill => <span key={skill} className="rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">{skill}</span>)}</div></div><span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{member.role}</span></div>)}</div></section><section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-black text-slate-900">Training progress</h3><p className="mt-1 text-xs text-slate-500">Mandatory paths: food safety, service standards and POS operations.</p><div className="mt-5 space-y-4">{selectedStaff.map(member => <div key={member.id}><div className="flex justify-between text-xs"><span className="font-bold text-slate-700">{member.name}</span><span className={`font-black ${member.training >= 90 ? "text-emerald-600" : member.training >= 70 ? "text-indigo-600" : "text-amber-600"}`}>{member.training}%</span></div><div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${member.training >= 90 ? "bg-emerald-500" : member.training >= 70 ? "bg-indigo-500" : "bg-amber-500"}`} style={{ width: `${member.training}%` }} /></div></div>)}</div><div className="mt-6 rounded-lg bg-violet-50 p-3 text-xs text-violet-900"><span className="font-black">Recommended next step: </span>Enroll Arjun in food-safety refresher training before assigning food-prep shifts.</div></section></div>}
+                {staffTab === "contacts" && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4"><h3 className="font-black text-slate-900">Staff contact & payroll directory</h3><p className="mt-1 text-xs text-slate-500">Monthly salary and work contact details for the selected outlet.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Team member</th><th className="px-4 py-3">Work email</th><th className="px-4 py-3">Phone number</th><th className="px-5 py-3 text-right">Monthly salary</th></tr></thead><tbody className="divide-y divide-slate-100">{selectedStaff.map(member => <tr key={member.id} className="hover:bg-slate-50"><td className="px-5 py-3"><p className="font-bold text-slate-900">{member.name}</p><p className="mt-0.5 text-[10px] text-slate-500">{member.role}</p></td><td className="px-4 py-3"><a className="font-medium text-indigo-700 hover:underline" href={`mailto:${member.email}`}>{member.email}</a></td><td className="px-4 py-3"><a className="font-medium text-slate-700 hover:text-indigo-700 hover:underline" href={`tel:${member.phone.replace(/\\s/g, "")}`}>{member.phone}</a></td><td className="px-5 py-3 text-right font-black text-slate-900">₹{member.salary.toLocaleString("en-IN")}</td></tr>)}</tbody><tfoot className="border-t-2 border-slate-200 bg-slate-50"><tr><td colSpan={3} className="px-5 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-500">Monthly payroll total</td><td className="px-5 py-3 text-right text-sm font-black text-indigo-700">₹{staffMetrics.monthlyPayroll.toLocaleString("en-IN")}</td></tr></tfoot></table></div></section>}
               </div>
             ) : selectedStep === 4 ? (
               <div className="space-y-6">
