@@ -1,0 +1,10 @@
+
+> backend@1.0.0 start
+> node server.js
+
+◇ injected env (0) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+[initNotificationDb] Ensuring Notification System tables exist...
+FranchiseOps AI Server running on port 5000
+Successfully connected to SQLite database
+[initNotificationDb] Notification System DB ready.
+[BackgroundWorker] Starting Agentic Notification & SLA background worker (interval: 15000ms)...
