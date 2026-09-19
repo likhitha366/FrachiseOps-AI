@@ -3,3 +3,7 @@ node_modules
 .env
 
 /generated/prisma
+
+# Project-local Python runtime used by the Marketing AI engine
+/.python/
+/python-*-amd64.exe

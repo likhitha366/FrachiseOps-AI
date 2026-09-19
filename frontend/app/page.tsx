@@ -457,7 +457,10 @@ export default function OperationsDashboard() {
 
   // Marketing Agent API Effect
   useEffect(() => {
-    if (activeStepId === 6) {
+    // Wait until the restored login has populated localStorage. Without this
+    // guard, a refresh can make this effect fire before Axios has a JWT and
+    // leave the marketing dashboard permanently empty after the 401 response.
+    if (activeStepId === 6 && !authLoading && currentUser) {
       setLoading(true);
       Promise.all([
         api.get("/marketing/kpis"),
@@ -478,7 +481,7 @@ export default function OperationsDashboard() {
         .catch((err) => console.error("Error loading marketing data:", err))
         .finally(() => setLoading(false));
     }
-  }, [activeStepId]);
+  }, [activeStepId, authLoading, currentUser]);
 
   // Audit Agent API Effect
   useEffect(() => {

@@ -527,9 +527,15 @@ function runPythonTask(task, data) {
       args.push(tmpFile);
     }
     
-    // Resolve python command
-    let pythonCmd = 'python';
-    if (process.platform === 'win32') {
+    // Resolve Python deterministically.  The marketing engine can be set up
+    // with a project-local runtime, so do not rely on the Windows Store
+    // `python` alias (it commonly exists without an executable behind it).
+    const projectPython = path.join(__dirname, '.python', process.platform === 'win32' ? 'python.exe' : 'bin/python3');
+    let pythonCmd = process.env.PYTHON_EXECUTABLE || projectPython;
+    if (!fs.existsSync(pythonCmd)) {
+      pythonCmd = 'python';
+    }
+    if (pythonCmd === 'python' && process.platform === 'win32') {
       const userProfile = process.env.USERPROFILE || '';
       const localAppData = process.env.LOCALAPPDATA || '';
       
